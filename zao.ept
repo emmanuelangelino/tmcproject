@@ -1,0 +1,177 @@
+(*
+    until => executa o estado em que está e transiciona para outro estado
+    unless => transiciona para outro estado e executa o novo estado
+*)
+
+node rad(up1,down1,up2,down2,c1,c2: bool)
+returns(power,state: int; rad_off,rad_frost: bool)
+let
+    automaton
+     state Off do
+        power = 0;
+        state = 0;
+        rad_off = true;
+        rad_frost = false;
+     unless up1 or not c1 then FrostProtection
+     state FrostProtection do
+        power = 300;
+        state = 1;
+        rad_off = false;
+        rad_frost = true;
+     unless up1 & c1 then Eco
+        | down1 or not c1 then Off
+     state Eco do
+        power = 1500;
+        state = 2;
+        rad_off = false;
+        rad_frost = false;
+     unless up2 & c2 then High
+        | down1 or not c1 then FrostProtection 
+     state High do
+        power = 2000;
+        state = 3;
+        rad_off = false;
+        rad_frost = false;
+     unless down1 or not c1 then Eco
+        | down2 or not c2 then FrostProtection 
+    end
+tel
+
+node wm(end,start,c: bool)
+returns(power,state: int)
+let
+    automaton
+     state Off do
+        power = 0;
+        state = 0;
+     unless start then WaterFill
+     state WaterFill do
+        power = 15;
+        state = 1;
+     unless end & c then Washing
+        | end & not c then Standby
+     state Washing do
+        power = 250;
+        state = 2;
+     unless end then Rinse
+     state Standby do
+        power = 0;
+        state = 3;
+     unless c then Washing
+     state Rinse do
+        power = 200;
+        state = 4;
+     unless end then Spin
+     state Spin do
+        power = 800;
+        state = 5;
+     unless end then Off
+    end
+tel
+
+node oven(start,c,finish,temp_ok,cold: bool)
+returns(power,state: int)
+let
+    automaton
+     state Off do
+        power = 0;
+        state = 0;
+     unless start & c then Heat
+        | start & not c then Standby
+     state Heat do
+        power = 1500;
+        state = 1;
+     unless temp_ok then Maintain
+        | finish then Off
+     state Standby do
+        power = 0;
+        state = 2;
+     unless c then Heat
+     state Maintain do
+        power = 300;
+        state = 3;
+     unless cold & c then Reheat
+        | finish then Off
+     state Reheat do
+        power = 1000;
+        state = 4;
+     unless temp_ok then Maintain
+        | finish then Off
+    end
+tel
+
+node door(push,c_door: bool)
+returns(door_open: bool)
+let
+    automaton
+     state Closed do
+        door_open = false;
+     unless push & c_door then Open
+     state Open do
+        door_open = true;
+     unless push or not c_door then Closed
+    end
+tel
+
+node room(presence: bool)
+returns(room_oc: bool)
+let
+    automaton
+     state Empty do
+        room_oc = false;
+     unless presence then Ocupied
+     state Ocupied do
+        room_oc = true;
+     unless not presence then Empty
+    end
+tel
+
+node mp(eco_input,comfort_input: bool)
+returns(PL: int; eco,comfort: bool)
+let
+    automaton
+     state MinimalSafety do
+        eco = false;
+        comfort = false;
+        PL = 3000;
+     unless eco_input then Eco
+        | comfort_input then Comfort
+     state Eco do
+        eco = true;
+        comfort = false;
+        PL = 5000;
+     unless comfort_input then Comfort
+        | not eco_input then MinimalSafety
+     state Comfort do
+        eco = false;
+        comfort = true;
+        PL = 7000;
+     unless eco_input then Eco
+        | not comfort_input then MinimalSafety
+    end
+tel
+
+node alltasks(up1,down1,up2,down2,end,start_wm,start_oven,finish,temp_ok,cold,push,presence,eco_input,comfort_input: bool)
+returns(power_rad,state_rad,power_wm,state_wm,power_oven,state_oven,PL: int; rad_off,rad_frost,door_open,window_open,lamp_on,tv_on,room_oc,eco,comfort: bool)
+let
+    totalPower = power_rad + power_wm + power_oven
+    r1 = not room_oc or (lamp_on or tv_on)
+    r2 = room_oc or not(door_open or window_open)
+    r3 = not(door_open or window_open) or (rad_off or rad_frost)
+    r4 = room_oc or (not(lamp_on or tv_on) & (rad_off or rad_frost)
+    r5 = totalPower <= PL
+tel
+    contract
+     enforce r1 & r2 & r3 & r4 & r5
+     with (c1,c2,c_wm,c_oven,c_door:bool)
+let
+    (power_rad,state_rad,rad_off,rad_frost) = inlined rad(up1,down1,up2,down2,c1,c2);
+    (power_wm,state_wm) = inlined wm(end,start_wm,c_wm);
+    (power_oven,state_oven) = inlined oven(start_oven,c_oven,finish,temp_ok,cold);
+    door_open = inlined door(push,c_door);
+    window_open = inlined door(push,c_door);
+    lamp_on = inlined door(push,c_door);
+    tv_on = inlined door(push,c_door);
+    room_oc = inlined room(presence);
+    (eco,comfort,PL) = inlined mp(eco_input,comfort_input)
+tel
