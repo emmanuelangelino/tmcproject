@@ -1,7 +1,7 @@
 
 SIM_PROG=zao
 # same as SIM_PROG, capitalized
-SIM_MOD=alltasks
+SIM_MOD=Alltasks
 SIM_NODE=alltasks
 CONTRACT_NODE=alltasks
 
